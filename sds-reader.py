@@ -12,7 +12,7 @@ import glob
 import numpy as np
 
 
-SENSORID = "YOUR-SENSOR-ID"
+SENSORID = "schuurstof"
 USBPORT  = "/dev/ttyUSB0"
 
 
@@ -103,19 +103,18 @@ class SensorDataUploader:
         try:
             postdata = dict(data=dict( 
                 id=self.id, 
-                data = idata,
-                swver = "python-sensor-uploader/1.0",
+                data = idata
                 ))
             postdata = urllib.urlencode(postdata)
             headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
-            conn = httplib.HTTPConnection("sensor.aqicn.org")
-            conn.request("POST", "/sensor/upload/", postdata, headers)
+            conn = httplib.HTTPConnection("www.kanbeter.info")
+            conn.request("POST", "/core/dustcatcher", postdata, headers)
             response = conn.getresponse()
             data = response.read()
             print("Posting {2} bytes -> {0} {1} ".format(response.status, response.reason, len(postdata)))
             conn.close()
             djson = json.loads(data)
-            r = djson["result"] == "ok"
+            r = djson["result"] == "1"
             if r!=1:
                 print("Server says -> {0} ".format(data))
             return r
