@@ -192,7 +192,7 @@ def loop(usbport):
     reader = SDS011Reader(usbport) 
     uploader = SensorDataUploader(SENSORID) 
     while 1:
-        uploader.postValues(reader.read(60))
+        uploader.postValues(reader.read(600))
 
 
 if len(sys.argv)==2:
