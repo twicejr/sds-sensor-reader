@@ -1,3 +1,4 @@
+from __future__ import division
 import serial
 import os 
 import sys, time
@@ -40,8 +41,8 @@ class SDS011Reader:
 
                 elif step>8:
                     step =0
-                    pm25 = (values[0]+values[1]*256)/10
-                    pm10 = (values[2]+values[3]*256)/10
+                    pm25 = values[0]+values[1]*256
+                    pm10 = values[2]+values[3]*256
                     return [pm25,pm10]
 
                 elif step>=2:
@@ -64,8 +65,8 @@ class SDS011Reader:
                 species[1].append(values[1])
                 count += 1
                 dt = os.times()[4]-start
-                print("[{:4.1f}] Samples:{:2d} PM2.5:{:4d} PM10:{:4d} StdDev(PM2.5):{:3.1f}".format(
-                    dt,count,values[0],values[1],np.std(species[0])
+                print("[{:4.1f}] Samples:{:2d} PM2.5:{:4.1f} PM10:{:4.1f} StdDev(PM2.5):{:3.1f}".format(
+                    dt,count,float(values[0])/10,float(values[1])/10,np.std(species[0])
                     ))
                 time.sleep(1)
             except KeyboardInterrupt:
