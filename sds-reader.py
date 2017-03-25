@@ -10,12 +10,14 @@ import httplib, urllib
 import tempfile
 import pickle
 import glob
+import traceback
 import numpy as np
 
 
 SENSORID = "schuurstof"
-USBPORT  = "/dev/ttyUSB0"
-
+USBPORT  = "/dev/ttyS0"
+POSTURL  = "/weer/storedust"
+POSTHOST = "www.kanbeter.info"
 
 class SDS011Reader:
 
@@ -55,18 +57,18 @@ class SDS011Reader:
         start = os.times()[4]
 
         count = 0
-        species = [[],[]]
+        species = []
         speciesType = ["pm2.5-mg","pm10-mg"]
 
         while os.times()[4]<start+duration:
             try:
                 values = self.readValue()
-                species[0].append(values[0])
-                species[1].append(values[1])
+                dt = datetime.now().isoformat()
+                species.append([dt, values])
                 count += 1
-                dt = os.times()[4]-start
-                print("[{:4.1f}] Samples:{:2d} PM2.5:{:4.1f} PM10:{:4.1f} StdDev(PM2.5):{:3.1f}".format(
-                    dt,count,float(values[0])/10,float(values[1])/10,np.std(species[0])
+                #dt = os.times()[4]-start
+                print("[{:18}] PM2.5:{:4.1f} PM10:{:4.1f}".format(
+                    dt,float(values[0])/10,float(values[1])/10
                     ))
                 time.sleep(1)
             except KeyboardInterrupt:
@@ -74,23 +76,10 @@ class SDS011Reader:
                 sys.exit()
             except:
                 e = sys.exc_info()[0]
+                e = traceback.format_exc(9);
                 print("Can not read the sensor data: "+str(e))
 
-        values = []
-        for i in range(len(species)):
-            values.append( dict( 
-                stddev = np.std(species[i]), 
-                median = np.median(species[i]),
-                min    = np.min(species[i]),
-                max    = np.max(species[i]),
-                avg    = np.average(species[i]),
-                type   = speciesType[i],
-                time   = datetime.now().isoformat(),
-                sensor = "SDS",
-                scale  = 1
-                ))
-
-        return values
+        return species
 
 
 class SensorDataUploader:
@@ -108,19 +97,20 @@ class SensorDataUploader:
                 ))
             postdata = urllib.urlencode(postdata)
             headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
-            conn = httplib.HTTPConnection("www.kanbeter.info")
-            conn.request("POST", "/core/dustcatcher", postdata, headers)
+            conn = httplib.HTTPSConnection(POSTHOST)
+            conn.request("POST", POSTURL, postdata, headers)
             response = conn.getresponse()
             data = response.read()
             print("Posting {2} bytes -> {0} {1} ".format(response.status, response.reason, len(postdata)))
             conn.close()
-            djson = json.loads(data)
-            r = djson["result"] == "1"
+            r = data == "1"
             if r!=1:
                 print("Server says -> {0} ".format(data))
             return r
         except:
             e = sys.exc_info()[0]
+            e = traceback.format_exc(9);
+
             print("http-post: error. "+str(e))
             return 0 
 
@@ -154,7 +144,7 @@ class SensorDataUploader:
             print("upload not ok... there are now {0} entries pending ({1}).".format(n,filePath))
             self.file_put_contents(filePath,pickle.dumps(values))
 
-            if n>15:
+            if n>150:
                 self.writecnt +=1
                 if self.writecnt>10:
                     #only write every 10 times to prevent from wearing the flash
@@ -162,7 +152,7 @@ class SensorDataUploader:
                     print("Writing to persistent storage: "+filePath2)
                     self.writecnt = 0
 
-            if n>100:
+            if n>10000:
                 print("Persitent storage file is too big ({}) -- reseting to new file ".format(n))
                 self.faildate = 0
         else:
@@ -193,7 +183,7 @@ def loop(usbport):
     reader = SDS011Reader(usbport) 
     uploader = SensorDataUploader(SENSORID) 
     while 1:
-        uploader.postValues(reader.read(600))
+        uploader.postValues(reader.read(15))
 
 
 if len(sys.argv)==2:
