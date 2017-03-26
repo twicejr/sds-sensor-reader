@@ -12,12 +12,11 @@ import pickle
 import glob
 import traceback
 import numpy as np
-
+import requests
 
 SENSORID = "schuurstof"
 USBPORT  = "/dev/ttyS0"
-POSTURL  = "/weer/storedust"
-POSTHOST = "www.kanbeter.info"
+POSTURL = "https://www.kanbeter.info/weer/storedust"
 
 class SDS011Reader:
 
@@ -64,7 +63,7 @@ class SDS011Reader:
             try:
                 values = self.readValue()
                 dt = datetime.now().isoformat()
-                species.append([dt, values])
+                species.append([dt, values[0], values[1]])
                 count += 1
                 #dt = os.times()[4]-start
                 print("[{:18}] PM2.5:{:4.1f} PM10:{:4.1f}".format(
@@ -91,18 +90,9 @@ class SensorDataUploader:
 
     def httpPost(self,idata):
         try:
-            postdata = dict(data=dict( 
-                id=self.id, 
-                data = idata
-                ))
-            postdata = urllib.urlencode(postdata)
-            headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
-            conn = httplib.HTTPSConnection(POSTHOST)
-            conn.request("POST", POSTURL, postdata, headers)
-            response = conn.getresponse()
-            data = response.read()
-            print("Posting {2} bytes -> {0} {1} ".format(response.status, response.reason, len(postdata)))
-            conn.close()
+            response = requests.post(POSTURL, data={"data": json.dumps({'data': idata})});
+            data = response.text;
+            print(response.status_code)
             r = data == "1"
             if r!=1:
                 print("Server says -> {0} ".format(data))
