@@ -10,16 +10,26 @@ import tempfile
 import pickle
 import glob
 import numpy as np
+import threading
 
 
 SENSORID = "YOUR-SENSOR-ID"
 USBPORT  = "/dev/ttyUSB0"
-
+INTERVAL = 1
+INTERVAL_UPLOAD = 10
 
 class SDS011Reader:
 
     def __init__(self, inport):
+        self._started = 1
         self.serial = serial.Serial(port=inport,baudrate=9600)
+        self.species = []
+
+    def started( self ):
+        return self._started
+
+    def stop( self ):
+        self._started = 0
 
     def readValue( self ):
         step = 0
@@ -49,32 +59,43 @@ class SDS011Reader:
                     step= step+1
 
 
+    def getClear( self ):
+        species = self.species
+        self.species = []
+        return species
 
-    def read( self, duration ):
+
+    def read( self ):
         start = os.times()[4]
 
         count = 0
+<<<<<<< HEAD
         species = [[],[]]
+=======
+>>>>>>> 96508a9... implement threading for continiuous stream of data
         speciesType = ["pm2.5-mg","pm10-mg"]
 
-        while os.times()[4]<start+duration:
+        while self._started:
             try:
                 values = self.readValue()
+<<<<<<< HEAD
                 species[0].append(values[0])
                 species[1].append(values[1])
+=======
+                dt = datetime.now().isoformat()
+                self.species.append([dt, values[0], values[1]])
+>>>>>>> 96508a9... implement threading for continiuous stream of data
                 count += 1
                 dt = os.times()[4]-start
                 print("[{:4.1f}] Samples:{:2d} PM2.5:{:4d} PM10:{:4d} StdDev(PM2.5):{:3.1f}".format(
                     dt,count,values[0],values[1],np.std(species[0])
                     ))
-                time.sleep(1)
-            except KeyboardInterrupt:
-                print "Bye"
-                sys.exit()
+                time.sleep(INTERVAL)
             except:
                 e = sys.exc_info()[0]
                 print("Can not read the sensor data: "+str(e))
 
+<<<<<<< HEAD
         values = []
         for i in range(len(species)):
             values.append( dict( 
@@ -91,6 +112,8 @@ class SDS011Reader:
 
         return values
 
+=======
+>>>>>>> 96508a9... implement threading for continiuous stream of data
 
 class SensorDataUploader:
 
@@ -187,14 +210,31 @@ class SensorDataUploader:
 
 
 
+stop_worker = 0
 
 def loop(usbport):
     print("Starting reading sensor "+SENSORID+" on port "+usbport)
-    reader = SDS011Reader(usbport) 
-    uploader = SensorDataUploader(SENSORID) 
+    reader = SDS011Reader(usbport)
+    uploader = SensorDataUploader(SENSORID)
+    t = threading.Thread(target=worker, args=(reader,))
+    t.start()
     while 1:
+<<<<<<< HEAD
         uploader.postValues(reader.read(60))
 
+=======
+        try:
+            time.sleep(INTERVAL_UPLOAD)
+            uploader.postValues(reader.getClear())
+        except KeyboardInterrupt:
+            print "Bye"
+            reader.stop()
+            sys.exit()
+    
+def worker(reader):
+    while reader.started():
+        reader.read()
+>>>>>>> 96508a9... implement threading for continiuous stream of data
 
 if len(sys.argv)==2:
     loop(sys.argv[1])
