@@ -13,7 +13,10 @@ import glob
 import traceback
 import numpy as np
 import requests
+import threading
 
+INTERVAL = 1
+INTERVAL_UPLOAD = 10
 SENSORID = "schuurstof"
 USBPORT  = "/dev/ttyS0"
 POSTURL = "https://www.kanbeter.info/weer/storedust"
@@ -21,7 +24,15 @@ POSTURL = "https://www.kanbeter.info/weer/storedust"
 class SDS011Reader:
 
     def __init__(self, inport):
+        self._started = 1
         self.serial = serial.Serial(port=inport,baudrate=9600)
+        self.species = []
+
+    def started( self ):
+        return self._started
+
+    def stop( self ):
+        self._started = 0
 
     def readValue( self ):
         step = 0
@@ -51,34 +62,33 @@ class SDS011Reader:
                     step= step+1
 
 
+    def getClear( self ):
+        species = self.species
+        self.species = []
+        return species
 
-    def read( self, duration ):
+
+    def read( self ):
         start = os.times()[4]
 
         count = 0
-        species = []
         speciesType = ["pm2.5-mg","pm10-mg"]
 
-        while os.times()[4]<start+duration:
+        while self._started:
             try:
                 values = self.readValue()
                 dt = datetime.now().isoformat()
-                species.append([dt, values[0], values[1]])
+                self.species.append([dt, values[0], values[1]])
                 count += 1
                 #dt = os.times()[4]-start
                 print("[{:18}] PM2.5:{:4.1f} PM10:{:4.1f}".format(
                     dt,float(values[0])/10,float(values[1])/10
                     ))
-                time.sleep(1)
-            except KeyboardInterrupt:
-                print "Bye"
-                sys.exit()
+                time.sleep(INTERVAL)
             except:
                 e = sys.exc_info()[0]
                 e = traceback.format_exc(9);
                 print("Can not read the sensor data: "+str(e))
-
-        return species
 
 
 class SensorDataUploader:
@@ -167,14 +177,26 @@ class SensorDataUploader:
 
 
 
+stop_worker = 0
 
 def loop(usbport):
     print("Starting reading sensor "+SENSORID+" on port "+usbport)
-    reader = SDS011Reader(usbport) 
-    uploader = SensorDataUploader(SENSORID) 
+    reader = SDS011Reader(usbport)
+    uploader = SensorDataUploader(SENSORID)
+    t = threading.Thread(target=worker, args=(reader,))
+    t.start()
     while 1:
-        uploader.postValues(reader.read(15))
-
+        try:
+            time.sleep(INTERVAL_UPLOAD)
+            uploader.postValues(reader.getClear())
+        except KeyboardInterrupt:
+            print "Bye"
+            reader.stop()
+            sys.exit()
+    
+def worker(reader):
+    while reader.started():
+        reader.read()
 
 if len(sys.argv)==2:
     loop(sys.argv[1])
