@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from __future__ import division
 import serial
 import os 
@@ -14,9 +15,17 @@ import traceback
 import numpy as np
 import requests
 import threading
+import RPi.GPIO as GPIO
+
+#ignore already in use... i know it.. maybe the mode was already set nothing else runs this sytem...
+GPIO.setwarnings(False)
+GPIO.setmode(GPIO.BOARD)
+GPIO.setup(11, GPIO.OUT)
+pin = GPIO.PWM(11, 0.5)
 
 INTERVAL = 1
 INTERVAL_UPLOAD = 10
+STOP_ON_ERRORS = 0
 SENSORID = "schuurstof"
 USBPORT  = "/dev/ttyS0"
 POSTURL = "https://www.kanbeter.info/weer/storedust"
@@ -27,6 +36,17 @@ class SDS011Reader:
         self._started = 1
         self.serial = serial.Serial(port=inport,baudrate=9600)
         self.species = []
+        self._needsAlarm = 1
+        self._needsAlarmLast = 0
+
+    def needsAlarm( self ):
+        return self._needsAlarm
+
+    def startAlarm ( self, hz ):
+        self._needsAlarm = hz
+ 
+    def stopAlarm( self ):
+        self._needsAlarm = 0    
 
     def started( self ):
         return self._started
@@ -79,6 +99,12 @@ class SDS011Reader:
                 values = self.readValue()
                 dt = datetime.now().isoformat()
                 self.species.append([dt, values[0], values[1]])
+                if values[0] > 2500 and self._needsAlarmLast != 2500:
+                    self._needsAlarm = 10
+                    self._needsAlarmLast = 2500
+                if values[0] < 2500:
+                    self._needsAlarmLast = 0
+
                 count += 1
                 #dt = os.times()[4]-start
                 print("[{:18}] PM2.5:{:4.1f} PM10:{:4.1f}".format(
@@ -89,7 +115,10 @@ class SDS011Reader:
                 e = sys.exc_info()[0]
                 e = traceback.format_exc(9);
                 print("Can not read the sensor data: "+str(e))
-
+                if(STOP_ON_ERRORS == 1):
+                    self._started = 0;
+                    sys.exit()
+                    
 
 class SensorDataUploader:
 
@@ -97,6 +126,8 @@ class SensorDataUploader:
         self.faildate = 0
         self.writecnt = 0
         self.id = id
+        self.filePath = ''
+        self.filePath2 = ''
 
     def httpPost(self,idata):
         try:
@@ -125,31 +156,31 @@ class SensorDataUploader:
             f.close()
 
     def postValues(self,values):
-        filePath = os.path.join(tempfile.gettempdir(), self.id+".pickle")
+        self.filePath = os.path.join(tempfile.gettempdir(), self.id+".pickle")
         if self.faildate==0:
             self.faildate = time.strftime("%Y-%m-%d-%H-%M-%S")
-        filePath2 = os.path.join(os.path.dirname(__file__), "pending."+self.id+"."+self.faildate+".pickle")
+        self.filePath2 = os.path.join(os.path.dirname(__file__), "pending."+self.id+"."+self.faildate+".pickle")
 
-        if os.path.isfile(filePath) and os.path.getsize(filePath)>0:
-            ovalues = pickle.loads(self.file_get_contents(filePath))
+        if os.path.isfile(self.filePath) and os.path.getsize(self.filePath)>0:
+            ovalues = pickle.loads(self.file_get_contents(self.filePath))
             print(ovalues)
 
             print("previous queue size has "+str(len(ovalues))+" entries")
             values = ovalues + values
-            os.remove(filePath)
+            os.remove(self.filePath)
             print(values)
 
         if not self.httpPost(values):
             n = len(values)
-            print("upload not ok... there are now {0} entries pending ({1}).".format(n,filePath))
-            self.file_put_contents(filePath,pickle.dumps(values))
+            print("upload not ok... there are now {0} entries pending ({1}).".format(n,self.filePath))
+            self.file_put_contents(self.filePath,pickle.dumps(values))
 
-            if n>150:
+            if n>99999:
                 self.writecnt +=1
                 if self.writecnt>10:
                     #only write every 10 times to prevent from wearing the flash
-                    self.file_put_contents(filePath2,pickle.dumps(values))
-                    print("Writing to persistent storage: "+filePath2)
+                    self.file_put_contents(self.filePath2,pickle.dumps(values))
+                    print("Writing to persistent storage: "+self.filePath2)
                     self.writecnt = 0
 
             if n>10000:
@@ -158,9 +189,9 @@ class SensorDataUploader:
         else:
             print("Data posting ok!")
             self.faildate = 0
-            if os.path.isfile(filePath2):
-                print("Deleting persistent storage file "+filePath2)
-                os.remove(filePath2)
+            if os.path.isfile(self.filePath2):
+                print("Deleting persistent storage file "+self.filePath2)
+                os.remove(self.filePath2)
             self.uploadQueue()
 
     def uploadQueue(self):
@@ -185,22 +216,61 @@ def loop(usbport):
     uploader = SensorDataUploader(SENSORID)
     t = threading.Thread(target=worker, args=(reader,))
     t.start()
+    t1 = threading.Thread(target=buzzer, args=(reader, pin))
+    t1.start()
     while 1:
         try:
             time.sleep(INTERVAL_UPLOAD)
             uploader.postValues(reader.getClear())
-        except KeyboardInterrupt:
+        except:
             print "Bye"
+            GPIO.cleanup()
+
             reader.stop()
+            if(uploader.filePath):
+                os.remove(uploader.filePath)
+            if(uploader.filePath2):
+                os.remove(uploader.filePath2)
+
             sys.exit()
     
 def worker(reader):
     while reader.started():
         reader.read()
 
+def buzzer(reader, pin):
+    while reader.started():
+        if reader.needsAlarm():
+            pin.start(25)
+            for dc in range(25, 101, 5):
+                pin.ChangeDutyCycle(dc)
+                pin.ChangeFrequency(dc*reader.needsAlarm())
+                time.sleep(0.02)
+            for dc in range(100, 26, -5):
+                pin.ChangeDutyCycle(dc)
+                pin.ChangeFrequency(dc*reader.needsAlarm())
+                time.sleep(0.04)
+            pin.stop()
+            reader.stopAlarm()
+        time.sleep(.1)
+
 if len(sys.argv)==2:
     loop(sys.argv[1])
 else:
     loop(USBPORT)
 
+#p.start(0)
+#try:
+#    while 1:
+#        for dc in range(25, 101, 5):
+#            p.ChangeDutyCycle(dc)
+#            p.ChangeFrequency(dc*5)
+#            time.sleep(0.05)
+#        for dc in range(100, 26, -5):
+##            p.ChangeDutyCycle(dc)
+#            p.ChangeFrequency(dc*5)
+#            time.sleep(0.05)
+#except KeyboardInterrupt:
+#    pass
+#p.stop()
 
