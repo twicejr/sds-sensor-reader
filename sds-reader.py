@@ -36,7 +36,7 @@ class SDS011Reader:
         self._started = 1
         self.serial = serial.Serial(port=inport,baudrate=9600)
         self.species = []
-        self._needsAlarm = 1
+        self._needsAlarm = .1
         self._needsAlarmLast = 0
 
     def needsAlarm( self ):
