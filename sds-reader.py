@@ -28,16 +28,17 @@ INTERVAL_UPLOAD = 10
 STOP_ON_ERRORS = 0
 SENSORID = "schuurstof"
 USBPORT  = "/dev/ttyS0"
-POSTURL = "https://www.kanbeter.info/weer/storedust"
+POSTURL = "https://www.kanbeter.info/wr/storedust"
 
 class SDS011Reader:
 
     def __init__(self, inport):
         self._started = 1
+        #raised initially 1 to beep initally
         self.raised = 1
         self.serial = serial.Serial(port=inport,baudrate=9600)
         self.species = []
-        self._needsAlarm = .9
+        self._needsAlarm = 0
         self._needsAlarmLast = 0
 
     def needsAlarm( self ):
@@ -98,25 +99,29 @@ class SDS011Reader:
                 dt = datetime.now().isoformat()
                 self.species.append([dt, values[0], values[1]])
                 oldLast = self._needsAlarmLast
-                if values[0] >= 2505 and self._needsAlarmLast != 2505: 
+
+                if values[0] >= 9999 and self._needsAlarmLast != 9999:
+                    self._needsAlarm = 9999
+                    self._needsAlarmLast = 9999
+                if values[0] >= 2505 and values[0] < 9999 and self._needsAlarmLast != 2505:
                     #hazardous
-                    self._needsAlarm = 10
+                    self._needsAlarm = 392
                     self._needsAlarmLast = 2505
                 if values[0] >= 1505 and values[0] < 2505 and self._needsAlarmLast != 1505:
                     #very unhealthy
-                    self._needsAlarm = 8
+                    self._needsAlarm = 349
                     self._needsAlarmLast = 1505
                 if values[0] >= 555 and values[0] < 1505 and self._needsAlarmLast != 555:
                     #unhealthy
-                    self._needsAlarm = 6
+                    self._needsAlarm = 330
                     self._needsAlarmLast = 555
                 if values[0] >= 355 and values[0] < 555 and self._needsAlarmLast != 355:
                     #unhealthy for sensitive groups
-                    self._needsAlarm = 4
+                    self._needsAlarm = 294
                     self._needsAlarmLast = 355
                 if values[0] >= 121 and values[0] < 355 and self._needsAlarmLast != 121:
                     #average
-                    self._needsAlarm = 2
+                    self._needsAlarm = 262
                     self._needsAlarmLast = 121
                 if values[0] < 121:
                     self._needsAlarm = 0
@@ -259,18 +264,20 @@ def worker(reader):
 def buzzer(reader, pin):
     while reader.started():
         if reader.needsAlarm():
-            pin.start(25)
+            pin.start(1)
             a = reader.needsAlarm()
-            for dc in range(25, 101, 5):
-                pin.ChangeDutyCycle(dc)
-                pin.ChangeFrequency(dc*a)
-                time.sleep(0.02+reader.raised/10)
-            for dc in range(100, 26, -5):
-                pin.ChangeDutyCycle(dc)
-                pin.ChangeFrequency(dc*a)
-                time.sleep(0.04+reader.raised/10)
-            pin.stop()
+            pin.ChangeDutyCycle(99)
+            pin.ChangeFrequency(a)
+            if reader.raised:
+                time.sleep(.7)
+            else:
+                time.sleep(.1)
+            b = a+a if reader.raised else a+100
+            for dc in range(a, b, -5):
+                pin.ChangeFrequency(dc)
+                time.sleep(1/b)
             reader.stopAlarm()
+            pin.stop()
         time.sleep(.1)
 
 if len(sys.argv)==2:
