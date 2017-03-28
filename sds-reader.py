@@ -99,10 +99,25 @@ class SDS011Reader:
                 values = self.readValue()
                 dt = datetime.now().isoformat()
                 self.species.append([dt, values[0], values[1]])
-                if values[0] > 2500 and self._needsAlarmLast != 2500:
+
+                if values[0] >= 2505 and self._needsAlarmLast != 2505: 
+                    #hazardous
                     self._needsAlarm = 10
-                    self._needsAlarmLast = 2500
-                if values[0] < 2500:
+                    self._needsAlarmLast = 2505
+                if values[0] >= 1505 and values[0] < 2505 and self._needsAlarmLast != 1505:
+                    #very unhealthy
+                    self._needsAlarm = 8
+                    self._needsAlarmLast = 1505
+                if values[0] >= 555 and values[0] < 1505 and self._needsAlarmLast != 555:
+                    #unhealthy
+                    self._needsAlarm = 6
+                    self._needsAlarmLast = 555
+                if values[0] >= 355 and values[0] < 555 and self._needsAlarmLast != 355:
+                    #unhealthy for sensitive groups
+                    self._needsAlarm = 4
+                    self._needsAlarmLast = 355
+                if values[0] < 355:
+                    self._needsAlarm = 0
                     self._needsAlarmLast = 0
 
                 count += 1
