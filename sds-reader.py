@@ -42,9 +42,6 @@ class SDS011Reader:
     def needsAlarm( self ):
         return self._needsAlarm
 
-    def startAlarm ( self, hz ):
-        self._needsAlarm = hz
- 
     def stopAlarm( self ):
         self._needsAlarm = 0    
 
@@ -118,9 +115,9 @@ class SDS011Reader:
                     self._needsAlarmLast = 355
                 if values[0] >= 121 and values[0] < 355 and self._needsAlarmLast != 121:
                     #average
-                    self._needsAlarm = 1
+                    self._needsAlarm = 2
                     self._needsAlarmLast = 121
-                if values[0] < 355:
+                if values[0] < 121:
                     self._needsAlarm = 0
                     self._needsAlarmLast = 0
 
@@ -261,13 +258,14 @@ def buzzer(reader, pin):
     while reader.started():
         if reader.needsAlarm():
             pin.start(25)
+            a = reader.needsAlarm()
             for dc in range(25, 101, 5):
                 pin.ChangeDutyCycle(dc)
-                pin.ChangeFrequency(dc*reader.needsAlarm())
+                pin.ChangeFrequency(dc*a)
                 time.sleep(0.02)
             for dc in range(100, 26, -5):
                 pin.ChangeDutyCycle(dc)
-                pin.ChangeFrequency(dc*reader.needsAlarm())
+                pin.ChangeFrequency(dc*a)
                 time.sleep(0.04)
             pin.stop()
             reader.stopAlarm()
