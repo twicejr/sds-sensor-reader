@@ -34,9 +34,10 @@ class SDS011Reader:
 
     def __init__(self, inport):
         self._started = 1
+        self.raised = 1
         self.serial = serial.Serial(port=inport,baudrate=9600)
         self.species = []
-        self._needsAlarm = .1
+        self._needsAlarm = .9
         self._needsAlarmLast = 0
 
     def needsAlarm( self ):
@@ -96,7 +97,7 @@ class SDS011Reader:
                 values = self.readValue()
                 dt = datetime.now().isoformat()
                 self.species.append([dt, values[0], values[1]])
-
+                oldLast = self._needsAlarmLast
                 if values[0] >= 2505 and self._needsAlarmLast != 2505: 
                     #hazardous
                     self._needsAlarm = 10
@@ -120,7 +121,8 @@ class SDS011Reader:
                 if values[0] < 121:
                     self._needsAlarm = 0
                     self._needsAlarmLast = 0
-
+                
+                self.raised = oldLast < self._needsAlarmLast
                 count += 1
                 #dt = os.times()[4]-start
                 print("[{:18}] PM2.5:{:4.1f} PM10:{:4.1f}".format(
@@ -262,11 +264,11 @@ def buzzer(reader, pin):
             for dc in range(25, 101, 5):
                 pin.ChangeDutyCycle(dc)
                 pin.ChangeFrequency(dc*a)
-                time.sleep(0.02)
+                time.sleep(0.02+reader.raised/10)
             for dc in range(100, 26, -5):
                 pin.ChangeDutyCycle(dc)
                 pin.ChangeFrequency(dc*a)
-                time.sleep(0.04)
+                time.sleep(0.04+reader.raised/10)
             pin.stop()
             reader.stopAlarm()
         time.sleep(.1)
