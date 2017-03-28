@@ -116,6 +116,10 @@ class SDS011Reader:
                     #unhealthy for sensitive groups
                     self._needsAlarm = 4
                     self._needsAlarmLast = 355
+                if values[0] >= 121 and values[0] < 355 and self._needsAlarmLast != 121:
+                    #average
+                    self._needsAlarm = 1
+                    self._needsAlarmLast = 121
                 if values[0] < 355:
                     self._needsAlarm = 0
                     self._needsAlarmLast = 0
