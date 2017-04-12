@@ -38,8 +38,16 @@ class SDS011Reader:
         self.raised = 1
         self.serial = serial.Serial(port=inport,baudrate=9600)
         self.species = []
+        self._raisedStep = 0
+        self._raisedStepLast = 1
         self._needsAlarm = 0
         self._needsAlarmLast = 0
+
+    def raisedStep( self ):
+        return self._raisedStep
+
+    def raisedStepLast( self ):
+        return self._raisedStepLast
 
     def needsAlarm( self ):
         return self._needsAlarm
@@ -99,6 +107,15 @@ class SDS011Reader:
                 dt = datetime.now().isoformat()
                 self.species.append([dt, values[0], values[1]])
                 oldLast = self._needsAlarmLast
+                
+                if values[0] > self._raisedStepLast:
+                    self._raisedStep = 1
+                if values[0] == self._raisedStepLast:
+                    self._raisedStep = 2
+                if values[0] < self._raisedStepLast:
+                    self._raisedStep = 0
+
+                self._raisedStepLast = values[0]
 
                 if values[0] >= 9999 and self._needsAlarmLast != 9999:
                     self._needsAlarm = 9999
@@ -270,6 +287,14 @@ def worker(reader):
 
 def buzzer(reader, pin):
     while reader.started():
+        if reader.raisedStep() == 1:
+            pin.start(11)
+            pin.ChangeFrequency(reader.raisedStepLast()+30)
+            time.sleep(.01)
+#        if reader.raisedStep() == 0:
+
+        pin.stop()
+        time.sleep(.7)
         if reader.needsAlarm():
             pin.start(1)
             a = reader.needsAlarm()
@@ -285,7 +310,6 @@ def buzzer(reader, pin):
                 time.sleep(.2/b)
             reader.stopAlarm()
             pin.stop()
-        time.sleep(.1)
 
 if len(sys.argv)==2:
     loop(sys.argv[1])
