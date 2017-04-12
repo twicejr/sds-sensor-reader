@@ -195,10 +195,10 @@ class SensorDataUploader:
 
         if not self.httpPost(values):
             n = len(values)
-            print("upload not ok... there are now {0} entries pending ({1}).".format(n,self.filePath))
+            print("upload not ok... there are now {0} entries pending.".format(n))
             self.file_put_contents(self.filePath,pickle.dumps(values))
 
-            if n>99999:
+            if n>1000000000:
                 self.writecnt +=1
                 if self.writecnt>10:
                     #only write every 10 times to prevent from wearing the flash
@@ -206,7 +206,7 @@ class SensorDataUploader:
                     print("Writing to persistent storage: "+self.filePath2)
                     self.writecnt = 0
 
-            if n>10000:
+            if n>1000000:
                 print("Persitent storage file is too big ({}) -- reseting to new file ".format(n))
                 self.faildate = 0
         else:
@@ -251,9 +251,16 @@ def loop(usbport):
 
             reader.stop()
             if(uploader.filePath):
-                os.remove(uploader.filePath)
+                try:
+                    os.remove(uploader.filePath)
+                except:
+                    print 'delete not ok'
+
             if(uploader.filePath2):
-                os.remove(uploader.filePath2)
+                try:
+                    os.remove(uploader.filePath2)
+                except:
+                    print 'delete not ok 2'
 
             sys.exit()
     
@@ -269,13 +276,13 @@ def buzzer(reader, pin):
             pin.ChangeDutyCycle(99)
             pin.ChangeFrequency(a)
             if reader.raised:
-                time.sleep(.7)
+                time.sleep(.2)
             else:
-                time.sleep(.1)
+                time.sleep(.05)
             b = a+a if reader.raised else a+100
             for dc in range(a, b, -5):
                 pin.ChangeFrequency(dc)
-                time.sleep(1/b)
+                time.sleep(.2/b)
             reader.stopAlarm()
             pin.stop()
         time.sleep(.1)
