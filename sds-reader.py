@@ -288,8 +288,8 @@ def worker(reader):
 def buzzer(reader, pin):
     while reader.started():
         if reader.raisedStep() == 1:
-            pin.start(11)
-            pin.ChangeFrequency(reader.raisedStepLast()+30)
+            pin.start(1)
+            pin.ChangeFrequency(reader.raisedStepLast())
             time.sleep(.01)
 #        if reader.raisedStep() == 0:
 
@@ -304,10 +304,6 @@ def buzzer(reader, pin):
                 time.sleep(.2)
             else:
                 time.sleep(.05)
-            b = a+a if reader.raised else a+100
-            for dc in range(a, b, -5):
-                pin.ChangeFrequency(dc)
-                time.sleep(.2/b)
             reader.stopAlarm()
             pin.stop()
 
