@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import division
 import serial
+import math
 import os 
 import sys, time
 from datetime import datetime, timedelta
@@ -145,6 +146,10 @@ class SDS011Reader:
                     self._needsAlarmLast = 0
                 
                 self.raised = oldLast < self._needsAlarmLast
+                if values[0] >= 9999:
+                    self.raised = 1
+                    self._needsAlarm = 9999
+
                 count += 1
                 #dt = os.times()[4]-start
                 print("[{:18}] PM2.5:{:4.1f} PM10:{:4.1f}".format(
@@ -267,11 +272,6 @@ def loop(usbport):
             GPIO.cleanup()
 
             reader.stop()
-            if(uploader.filePath):
-                try:
-                    os.remove(uploader.filePath)
-                except:
-                    print 'delete not ok'
 
             if(uploader.filePath2):
                 try:
@@ -288,20 +288,19 @@ def worker(reader):
 def buzzer(reader, pin):
     while reader.started():
         if reader.raisedStep() == 1:
-            pin.start(1)
-            pin.ChangeFrequency(reader.raisedStepLast())
-            time.sleep(.01)
+            pin.start(99)
+            pin.ChangeFrequency(math.pow((reader.raisedStepLast()/10) + 30, 1.4))
+            time.sleep(.008)
 #        if reader.raisedStep() == 0:
 
         pin.stop()
-        time.sleep(.7)
+        time.sleep(.98)
         if reader.needsAlarm():
             pin.start(1)
             a = reader.needsAlarm()
-            pin.ChangeDutyCycle(99)
             pin.ChangeFrequency(a)
             if reader.raised:
-                time.sleep(.2)
+                time.sleep(.25)
             else:
                 time.sleep(.05)
             reader.stopAlarm()
